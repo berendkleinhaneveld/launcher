@@ -111,6 +111,47 @@ Limits worth knowing:
   service can't answer. Items made by Set Secret or the `security` command above
   don't.
 
+## Example: Google Drive with rclone
+
+This mounts your Drive at `~/GoogleDrive`, so you can start and stop it from the
+menu. Homebrew's rclone refuses `rclone mount`, which needs FUSE, but
+`rclone nfsmount` works without installing anything else and without sudo.
+
+Connect your account, which opens a browser, and make the mount point:
+
+```bash
+rclone config create gdrive drive
+```
+
+```bash
+mkdir ~/GoogleDrive
+```
+
+Then add the service:
+
+```ini
+[Google Drive]
+command = rclone nfsmount gdrive: ~/GoogleDrive --vfs-cache-mode full --vfs-cache-max-size 10G
+```
+
+Stop and Restart unmount cleanly. Some things are specific to a mount:
+
+- Don't add `--daemon`. rclone has to stay in the foreground for launchd to manage
+  it.
+- Without `--vfs-cache-mode` the mount is read-only on macOS. The cache lives in
+  `~/Library/Caches/rclone`.
+- Leave `restart` at `no`. launchd would retry a failure that a retry can't fix,
+  such as a remote that isn't set up yet.
+- Finder can use the mount straight away. Other apps need the Network Volumes
+  permission, which macOS can't ask a background job for, so those get
+  `Operation not permitted`.
+- `failing create to indicate lack of support for 'exclusive' mode` in the log is
+  harmless. It's rclone's NFS server answering a macOS request.
+- If rclone is killed outright, for example with Force Quit, the mount outlives it.
+  Finder sits on "Loading…" and Start fails with `already mounted`. `umount` and
+  `diskutil` can't clear it either, because they wait for the server that's gone,
+  so restart the Mac.
+
 ## How it maps to launchd
 
 Each service is a generated user agent labelled `local.launcher.<name>`. Don't

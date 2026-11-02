@@ -83,6 +83,16 @@ import Testing
         #expect(manager.status(of: service) == .stopped)
     }
 
+    /// Restarting replaces the running instance, however long it takes to shut down.
+    @Test func restartWaitsForASlowExit() async throws {
+        let service = try await service("trap 'sleep 2; exit 0' TERM; while true; do sleep 0.1; done")
+        await manager.start(service)
+        _ = try await wait(service) { $0.isRunning }
+
+        await manager.start(service)
+        _ = try await wait(service) { $0.isRunning }
+    }
+
     @Test func failureIsReportedAndStopClearsIt() async throws {
         let service = try await service("exit 3")
         await manager.start(service)

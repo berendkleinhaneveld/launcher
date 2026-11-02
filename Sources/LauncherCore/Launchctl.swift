@@ -44,8 +44,14 @@ public enum Launchctl {
     }
 
     /// Stops the job and unloads it. Unloading an unknown job is not an error.
+    /// launchctl returns while the job is still shutting down, and loading it again
+    /// before that's done fails, so this waits. launchd's SIGKILL comes after 20 seconds.
     public static func bootout(_ label: String) async {
         _ = await run("bootout", "\(domain)/\(label)")
+        let deadline = Date().addingTimeInterval(25)
+        while Date() < deadline, await run("print", "\(domain)/\(label)").status == 0 {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
     }
 
     /// Clears a persistent `launchctl disable`, which would block `bootstrap`.
