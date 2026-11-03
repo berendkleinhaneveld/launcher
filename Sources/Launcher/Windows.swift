@@ -56,13 +56,13 @@ final class Windows {
             isRunning: service.map { manager.status(of: $0).isRunning } ?? false,
             taken: Set(manager.services.map(\.slug)).subtracting([service?.slug].compactMap { $0 }),
             defaultLog: { manager.layout.defaultLogURL(forName: $0).path },
-            onSave: { [weak window] edited, values in
+            onSave: { [weak window] edited, values, startNew in
                 do {
                     // Asked before saving, because saving a rename stops the old job.
                     let wasRunning = service.map { manager.status(of: $0).isRunning } ?? false
                     try await manager.save(edited, replacing: service, storing: values)
-                    // Adding means wanting it to run, and a running service needs a restart.
-                    if service == nil || wasRunning {
+                    // A running service needs a restart to pick up the changes.
+                    if startNew || wasRunning {
                         await manager.start(edited)
                     }
                     window?.close()
@@ -160,7 +160,8 @@ private struct ServiceForm: View {
     let isRunning: Bool
     let taken: Set<String>
     let defaultLog: (String) -> String
-    let onSave: (Service, [String: String]) async -> String?
+    /// Gets the edited service, new secret values, and whether to start a new service.
+    let onSave: (Service, [String: String], Bool) async -> String?
     let onRemove: () -> Void
     let onCancel: () -> Void
 
@@ -183,7 +184,7 @@ private struct ServiceForm: View {
         isRunning: Bool,
         taken: Set<String>,
         defaultLog: @escaping (String) -> String,
-        onSave: @escaping (Service, [String: String]) async -> String?,
+        onSave: @escaping (Service, [String: String], Bool) async -> String?,
         onRemove: @escaping () -> Void,
         onCancel: @escaping () -> Void
     ) {
@@ -211,7 +212,7 @@ private struct ServiceForm: View {
     }
 
     private var saveTitle: String {
-        if original == nil { return "Add & Start" }
+        if original == nil { return "Add" }
         return isRunning ? "Save & Restart" : "Save"
     }
 
@@ -286,7 +287,11 @@ private struct ServiceForm: View {
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button(saveTitle, action: save)
+                if original == nil {
+                    Button("Add & Start") { save(startNew: true) }
+                        .disabled(saving)
+                }
+                Button(saveTitle) { save(startNew: false) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(saving)
             }
@@ -328,12 +333,12 @@ private struct ServiceForm: View {
         }
     }
 
-    private func save() {
+    private func save(startNew: Bool) {
         do {
             let service = try makeService()
             saving = true
             Task {
-                error = await onSave(service, newSecretValues)
+                error = await onSave(service, newSecretValues, startNew)
                 saving = false
             }
         } catch {
