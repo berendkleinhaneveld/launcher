@@ -100,11 +100,13 @@ final class MenuController: NSObject, NSMenuDelegate {
     }
 
     private func openConfigFile() {
-        // `.conf` has no default app, so ask for the default text editor.
-        let open = Process()
-        open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        open.arguments = ["-t", manager.layout.configFile.path]
-        try? open.run()
+        // The app chosen for `.conf` files, else the default text editor, because
+        // out of the box `.conf` may have no app at all.
+        let workspace = NSWorkspace.shared
+        let file = manager.layout.configFile
+        guard let app = workspace.urlForApplication(toOpen: file)
+            ?? workspace.urlForApplication(toOpen: .plainText) else { return }
+        workspace.open([file], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
     }
 
     private func toggleLaunchAtLogin() {
